@@ -3,6 +3,7 @@ from model_handler import EnergyBot
 from metrics_handler import ChatMetrics
 from config import ModelConfig
 import time
+import traceback
 
 # Page configuration
 st.set_page_config(
@@ -14,14 +15,26 @@ st.set_page_config(
 
 def init_session_state():
     """Initialize session state variables"""
-    if 'model' not in st.session_state:
-        with st.spinner('Loading model... This might take a minute...'):
-            config = ModelConfig()
-            st.session_state.model = EnergyBot(config)
-    if 'metrics' not in st.session_state:
-        st.session_state.metrics = ChatMetrics()
-    if 'messages' not in st.session_state:
-        st.session_state.messages = []
+    try:
+        if 'model' not in st.session_state:
+            with st.spinner('Loading model... This might take a minute...'):
+                # Verify secrets
+                if "HUGGING_FACE_TOKEN" not in st.secrets:
+                    st.error("HUGGING_FACE_TOKEN not found in secrets!")
+                    st.stop()
+                
+                config = ModelConfig()
+                st.session_state.model = EnergyBot(config)
+                st.success("Model loaded successfully!")
+                
+        if 'metrics' not in st.session_state:
+            st.session_state.metrics = ChatMetrics()
+        if 'messages' not in st.session_state:
+            st.session_state.messages = []
+    except Exception as e:
+        st.error(f"Error initializing app: {str(e)}")
+        st.error("Detailed error: " + traceback.format_exc())
+        st.stop()
 
 # Load custom CSS
 with open('style.css') as f:
