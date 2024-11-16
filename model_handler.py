@@ -4,38 +4,61 @@ from typing import Tuple
 import time
 import streamlit as st
 from config import ModelConfig, SystemPrompts
+from huggingface_hub import login
+import os
 
 @st.cache_resource
-def load_model(model_path: str, base_model: str):
+def load_model(_model_path: str, _base_model: str) -> Tuple[AutoModelForCausalLM, AutoTokenizer]:
     """Load model and tokenizer with caching"""
     try:
-        print("Loading tokenizer...")
-        tokenizer = AutoTokenizer.from_pretrained(
-            base_model = "energy-gemma-2b",
-            trust_remote_code=True
-        )
+        # Login to Hugging Face
+        if "HUGGING_FACE_TOKEN" in st.secrets:
+            token = st.secrets["HUGGING_FACE_TOKEN"]
+            login(token=token)
+            os.environ["HUGGING_FACE_HUB_TOKEN"] = token
+            st.write("Successfully logged in to Hugging Face")
+        else:
+            st.error("HUGGING_FACE_TOKEN not found in secrets")
+            st.stop()
+
+        # Load tokenizer
+        st.write(f"Loading tokenizer from {_base_model}...")
+        tokenizer = AutoTokenizer.from_pretrained(_base_model, trust_remote_code=True)
         
-        print("Loading model...")
+        # Set pad token if not set
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+            
+        # Load model
+        st.write(f"Loading model from {_model_path}...")
         model = AutoModelForCausalLM.from_pretrained(
-            model_path,
+            _model_path,
             device_map="auto",
-            torch_dtype=torch.bfloat16,
+            torch_dtype=torch.float16,
             trust_remote_code=True
         )
         model.eval()
-        print("Model loaded successfully!")
+        st.write("Model loaded successfully!")
         return model, tokenizer
+        
     except Exception as e:
+        st.error(f"Error loading model: {str(e)}")
         raise RuntimeError(f"Failed to load model: {str(e)}")
 
 class EnergyBot:
     def __init__(self, config: ModelConfig):
         self.config = config
         self.system_prompts = SystemPrompts()
-        self.model, self.tokenizer = load_model(
-            model_path=config.model_path,
-            base_model=config.base_model
-        )
+        try:
+            st.write(f"Initializing with base model: {config.base_model}")
+            st.write(f"Loading fine-tuned model from: {config.model_path}")
+            self.model, self.tokenizer = load_model(
+                _model_path=config.model_path,
+                _base_model=config.base_model
+            )
+        except Exception as e:
+            st.error(f"Failed to initialize EnergyBot: {str(e)}")
+            raise
 
     def _detect_query_type(self, query: str) -> str:
         """Detect query type to select appropriate system prompt"""
@@ -84,4 +107,5 @@ class EnergyBot:
             return response, elapsed_time, token_count
             
         except Exception as e:
+            st.error(f"Error generating response: {str(e)}")
             return f"Error generating response: {str(e)}", time.time() - start_time, 0
