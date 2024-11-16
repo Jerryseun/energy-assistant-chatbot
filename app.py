@@ -1,6 +1,7 @@
 import streamlit as st
 import sys
 import torch
+import transformers
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel, PeftConfig
 from huggingface_hub import login
@@ -12,11 +13,24 @@ st.title("⚡ Energy Infrastructure Assistant")
 
 def test_environment():
     """Test and display environment information"""
+    info = []
+    
+    # System info
+    info.append(f"Python version: {sys.version}")
+    info.append(f"PyTorch version: {torch.__version__}")
+    info.append(f"Transformers version: {transformers.__version__}")
+    info.append(f"Device: {'cuda' if torch.cuda.is_available() else 'cpu'}")
+    
+    # Display all info
     st.write("Environment Information:")
-    st.write("Python version:", sys.version)
-    st.write("PyTorch version:", torch.__version__)
-    st.write("Transformers version:", transformers.__version__)
-    st.write("Device:", "cuda" if torch.cuda.is_available() else "cpu")
+    for line in info:
+        st.write(line)
+    
+    # Check CUDA
+    if torch.cuda.is_available():
+        st.write(f"CUDA Device: {torch.cuda.get_device_name(0)}")
+        st.write(f"CUDA Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
+    
     return True
 
 def initialize_model():
@@ -39,7 +53,8 @@ def initialize_model():
             base_model_id,
             token=token,
             device_map="auto",
-            torch_dtype=torch.float16
+            torch_dtype=torch.float16,
+            trust_remote_code=True
         )
         st.success("✅ Base model loaded")
 
@@ -47,7 +62,8 @@ def initialize_model():
         st.info("Loading tokenizer...")
         tokenizer = AutoTokenizer.from_pretrained(
             base_model_id,
-            token=token
+            token=token,
+            trust_remote_code=True
         )
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
@@ -57,11 +73,18 @@ def initialize_model():
         peft_model_id = "adetunjijeremiah/energy-gemma-2b"
         st.info(f"Loading PEFT model: {peft_model_id}")
         
-        model = PeftModel.from_pretrained(
-            base_model,
+        peft_config = PeftConfig.from_pretrained(
             peft_model_id,
             token=token
         )
+        
+        model = PeftModel.from_pretrained(
+            base_model,
+            peft_model_id,
+            token=token,
+            device_map="auto"
+        )
+        model.eval()
         st.success("✅ PEFT model loaded")
 
         return model, tokenizer
@@ -75,6 +98,7 @@ def main():
     # Test environment first
     if test_environment():
         st.success("✅ Environment check passed")
+        st.write("---")
     
     # Initialize chat history
     if "messages" not in st.session_state:
