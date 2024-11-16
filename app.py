@@ -16,36 +16,35 @@ def initialize_model():
                 login(token=token)
                 st.info("🔑 Authenticated with Hugging Face")
 
-                # Load tokenizer
-                st.info("📚 Loading tokenizer...")
+                # Load base model and tokenizer
+                base_model_id = "google/gemma-2b"
+                st.info(f"📚 Loading model from {base_model_id}...")
+
                 tokenizer = AutoTokenizer.from_pretrained(
-                    "google/gemma-2b",
-                    token=token,  # Use token instead of use_auth_token
+                    base_model_id,
+                    token=token,
                     trust_remote_code=True
                 )
                 tokenizer.pad_token = tokenizer.eos_token
                 st.success("✅ Tokenizer loaded")
 
-                # Load model with specific Gemma configurations
-                st.info("🔄 Loading model (this may take a few minutes)...")
                 model = AutoModelForCausalLM.from_pretrained(
-                    "adetunjijeremiah/energy-gemma-2b",
-                    token=token,  # Use token instead of use_auth_token
+                    base_model_id,
+                    token=token,
                     device_map="auto",
                     torch_dtype=torch.float16,
                     trust_remote_code=True,
-                    low_cpu_mem_usage=True,
-                    config_overrides={
-                        "hidden_activation": "gelu_pytorch_tanh"
-                    }
+                    low_cpu_mem_usage=True
                 )
-                
-                # Tie weights explicitly
-                model.tie_weights()
-                
+
+                # Verify model loaded correctly
+                if model is None:
+                    raise ValueError("Model failed to load")
+
                 # Move model to device
                 device = "cuda" if torch.cuda.is_available() else "cpu"
                 model = model.to(device)
+                model.eval()  # Set to evaluation mode
                 
                 st.session_state.model = model
                 st.session_state.tokenizer = tokenizer
@@ -55,6 +54,43 @@ def initialize_model():
             except Exception as e:
                 st.error(f"❌ Error: {str(e)}")
                 st.stop()
+
+def generate_response(prompt: str) -> str:
+    """Generate response with energy domain prompt engineering"""
+    system_prompt = """You are an expert energy infrastructure assistant. 
+    Provide detailed and accurate responses about energy systems, monitoring, and operations.
+    Focus on clear, actionable information and safety considerations."""
+    
+    full_prompt = f"{system_prompt}\n\nQuery: {prompt}\nResponse:"
+    
+    try:
+        inputs = st.session_state.tokenizer(
+            full_prompt,
+            return_tensors="pt",
+            padding=True
+        ).to(st.session_state.model.device)
+
+        outputs = st.session_state.model.generate(
+            **inputs,
+            max_length=512,
+            temperature=0.7,
+            top_p=0.9,
+            do_sample=True,
+            pad_token_id=st.session_state.tokenizer.pad_token_id,
+            eos_token_id=st.session_state.tokenizer.eos_token_id,
+            repetition_penalty=1.1
+        )
+
+        response = st.session_state.tokenizer.decode(
+            outputs[0],
+            skip_special_tokens=True
+        ).replace(full_prompt, "").strip()
+
+        return response
+
+    except Exception as e:
+        st.error(f"❌ Error generating response: {str(e)}")
+        return "I apologize, but I encountered an error generating the response. Please try again."
 
 def main():
     st.title("⚡ Energy Infrastructure Assistant")
@@ -73,46 +109,19 @@ def main():
 
     # Chat input
     if prompt := st.chat_input("Ask about energy infrastructure..."):
+        # Add user message
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Generate response
+        # Generate and display response
         with st.chat_message("assistant"):
-            try:
-                with st.spinner("🤔 Thinking..."):
-                    # Prepare input
-                    input_text = f"Query: {prompt}\nResponse:"
-                    inputs = st.session_state.tokenizer(
-                        input_text,
-                        return_tensors="pt",
-                        padding=True
-                    ).to(st.session_state.model.device)
-
-                    # Generate
-                    outputs = st.session_state.model.generate(
-                        **inputs,
-                        max_length=512,
-                        temperature=0.7,
-                        top_p=0.9,
-                        do_sample=True,
-                        pad_token_id=st.session_state.tokenizer.pad_token_id,
-                        eos_token_id=st.session_state.tokenizer.eos_token_id
-                    )
-
-                    # Decode response
-                    response = st.session_state.tokenizer.decode(
-                        outputs[0],
-                        skip_special_tokens=True
-                    ).replace(input_text, "").strip()
-
-                    st.markdown(response)
-                    st.session_state.messages.append(
-                        {"role": "assistant", "content": response}
-                    )
-
-            except Exception as e:
-                st.error(f"❌ Error generating response: {str(e)}")
+            with st.spinner("🤔 Thinking..."):
+                response = generate_response(prompt)
+                st.markdown(response)
+                st.session_state.messages.append(
+                    {"role": "assistant", "content": response}
+                )
 
     # Sidebar
     with st.sidebar:
