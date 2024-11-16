@@ -36,6 +36,7 @@ def init_session_state():
         st.error("Detailed error: " + traceback.format_exc())
         st.stop()
 
+
 # Load custom CSS
 with open('style.css') as f:
     st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)

@@ -5,7 +5,6 @@ import time
 import streamlit as st
 from config import ModelConfig, SystemPrompts
 from huggingface_hub import login
-import os
 
 @st.cache_resource
 def load_model(model_path: str, base_model: str):
@@ -13,9 +12,7 @@ def load_model(model_path: str, base_model: str):
     try:
         # Login to Hugging Face
         if "HUGGING_FACE_TOKEN" in st.secrets:
-            token = st.secrets["HUGGING_FACE_TOKEN"]
-            login(token=token)
-            os.environ["HUGGING_FACE_HUB_TOKEN"] = token
+            login(token=st.secrets["HUGGING_FACE_TOKEN"])
             print("Successfully logged in to Hugging Face")
         else:
             raise ValueError("HUGGING_FACE_TOKEN not found in secrets")
@@ -23,27 +20,23 @@ def load_model(model_path: str, base_model: str):
         print(f"Loading tokenizer from {base_model}...")
         tokenizer = AutoTokenizer.from_pretrained(
             base_model,
-            token=st.secrets["HUGGING_FACE_TOKEN"],
-            trust_remote_code=True
+            trust_remote_code=True,
+            use_auth_token=st.secrets["HUGGING_FACE_TOKEN"]
         )
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
         
         print(f"Loading model from {model_path}...")
         model = AutoModelForCausalLM.from_pretrained(
             model_path,
-            token=st.secrets["HUGGING_FACE_TOKEN"],
             device_map="auto",
             torch_dtype=torch.bfloat16,
-            trust_remote_code=True
+            trust_remote_code=True,
+            use_auth_token=st.secrets["HUGGING_FACE_TOKEN"]
         )
         model.eval()
         print("Model loaded successfully!")
         return model, tokenizer
     except Exception as e:
-        detailed_error = f"Error details: {str(e)}"
-        print(detailed_error)
-        st.error(detailed_error)
+        st.error(f"Error loading model: {str(e)}")
         raise RuntimeError(f"Failed to load model: {str(e)}")
 
 class EnergyBot:
@@ -51,7 +44,6 @@ class EnergyBot:
         self.config = config
         self.system_prompts = SystemPrompts()
         try:
-            print(f"Initializing EnergyBot with model path: {config.model_path}")
             self.model, self.tokenizer = load_model(
                 model_path=config.model_path,
                 base_model=config.base_model
@@ -59,7 +51,6 @@ class EnergyBot:
         except Exception as e:
             st.error(f"Failed to initialize EnergyBot: {str(e)}")
             raise
-
 
     def _detect_query_type(self, query: str) -> str:
         """Detect query type to select appropriate system prompt"""
