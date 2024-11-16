@@ -1,64 +1,105 @@
+# Must be the first import and command
 import streamlit as st
+st.set_page_config(page_title="Energy Assistant", page_icon="⚡")
 
-# This must be the first Streamlit command
-st.set_page_config(page_title="Energy Assistant Debug", page_icon="⚡")
-
-# Now we can add other imports and debug info
-import sys
-import os
+# Other imports
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from huggingface_hub import login
 
-# Debug information
-st.title("Energy Assistant - Debug Mode")
-st.write("Python version:", sys.version)
-st.write("Current working directory:", os.getcwd())
-st.write("Files in directory:", os.listdir())
-st.write("PyTorch version:", torch.__version__)
-st.write("CUDA available:", torch.cuda.is_available())
-if torch.cuda.is_available():
-    st.write("CUDA device:", torch.cuda.get_device_name(0))
-
-# Test Hugging Face token
-if "HUGGING_FACE_TOKEN" in st.secrets:
-    st.write("Hugging Face token found in secrets")
-    try:
-        login(token=st.secrets["HUGGING_FACE_TOKEN"])
-        st.write("Successfully logged in to Hugging Face")
-        
-        # Test model loading
-        with st.spinner("Testing model loading..."):
+def initialize_model():
+    """Initialize the model with error handling"""
+    if "model" not in st.session_state:
+        with st.spinner("Loading model... Please wait..."):
             try:
+                # Login to Hugging Face
+                if "HUGGING_FACE_TOKEN" not in st.secrets:
+                    st.error("Missing Hugging Face token!")
+                    st.stop()
+                
+                login(token=st.secrets["HUGGING_FACE_TOKEN"])
+                
+                # Load tokenizer
+                st.info("Loading tokenizer...")
                 tokenizer = AutoTokenizer.from_pretrained(
                     "google/gemma-2b",
-                    token=st.secrets["HUGGING_FACE_TOKEN"],
+                    use_auth_token=True,
                     trust_remote_code=True
                 )
-                st.success("✅ Tokenizer loaded successfully")
                 
+                if tokenizer.pad_token is None:
+                    tokenizer.pad_token = tokenizer.eos_token
+                
+                st.success("Tokenizer loaded!")
+                
+                # Load model
+                st.info("Loading model...")
                 model = AutoModelForCausalLM.from_pretrained(
                     "adetunjijeremiah/energy-gemma-2b",
-                    token=st.secrets["HUGGING_FACE_TOKEN"],
                     device_map="auto",
                     torch_dtype=torch.float16,
+                    use_auth_token=True,
                     trust_remote_code=True
                 )
-                st.success("✅ Model loaded successfully")
+                
+                st.session_state.model = model
+                st.session_state.tokenizer = tokenizer
+                st.success("Model loaded successfully!")
                 
             except Exception as e:
-                st.error(f"Error loading model: {str(e)}")
-                
-    except Exception as e:
-        st.error(f"Error logging in to Hugging Face: {str(e)}")
-else:
-    st.error("No Hugging Face token found in secrets")
+                st.error(f"Error initializing model: {str(e)}")
+                st.stop()
 
-# System info
-st.subheader("System Information")
-st.code(f"""
-Python: {sys.version}
-PyTorch: {torch.__version__}
-CUDA: {torch.cuda.is_available()}
-Directory: {os.getcwd()}
-""")
+def main():
+    st.title("Energy Infrastructure Assistant")
+    
+    # Initialize chat history
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+    
+    # Initialize model
+    initialize_model()
+    
+    # Display chat messages
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+    
+    # Get user input
+    if prompt := st.chat_input("Ask about energy infrastructure..."):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+            
+        # Generate response
+        with st.chat_message("assistant"):
+            try:
+                full_prompt = f"Query: {prompt}\nResponse:"
+                inputs = st.session_state.tokenizer(
+                    full_prompt, 
+                    return_tensors="pt"
+                ).to(st.session_state.model.device)
+                
+                outputs = st.session_state.model.generate(
+                    **inputs,
+                    max_length=512,
+                    temperature=0.7,
+                    do_sample=True,
+                    top_p=0.9
+                )
+                
+                response = st.session_state.tokenizer.decode(
+                    outputs[0], 
+                    skip_special_tokens=True
+                ).replace(full_prompt, "").strip()
+                
+                st.markdown(response)
+                st.session_state.messages.append(
+                    {"role": "assistant", "content": response}
+                )
+                
+            except Exception as e:
+                st.error(f"Error generating response: {str(e)}")
+
+if __name__ == "__main__":
+    main()
