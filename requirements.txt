@@ -1,6 +1,8 @@
 streamlit==1.31.0
-torch>=2.0.0
-transformers>=4.37.0
-accelerate>=0.26.0
+transformers==4.37.2
+torch==2.0.1
+accelerate==0.25.0
 peft==0.7.1
+bitsandbytes==0.41.1
+safetensors
 protobuf>=3.20.0

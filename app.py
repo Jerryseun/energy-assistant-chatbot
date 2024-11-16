@@ -1,113 +1,67 @@
 import streamlit as st
 st.set_page_config(page_title="Energy Assistant", page_icon="⚡")
 
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from peft import PeftModel, PeftConfig
-from huggingface_hub import login
-import time
+# First, test imports with error handling
+try:
+    import torch
+    import transformers
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from peft import PeftModel, PeftConfig
+    from huggingface_hub import login
+    st.success("✅ All required packages imported successfully")
+except Exception as e:
+    st.error(f"Failed to import required packages: {str(e)}")
+    st.stop()
 
-def initialize_model():
-    """Initialize the PEFT model with proper loading sequence"""
-    if "model" not in st.session_state:
-        with st.spinner("🔄 Initializing..."):
-            try:
-                # Login to Hugging Face
-                token = st.secrets["HUGGING_FACE_TOKEN"]
-                login(token=token)
-                st.info("🔑 Authenticated with Hugging Face")
-
-                # Load base model and tokenizer
-                base_model_id = "google/gemma-2b"
-                peft_model_id = "adetunjijeremiah/energy-gemma-2b"
-
-                # Load tokenizer
-                st.info("📚 Loading tokenizer...")
-                tokenizer = AutoTokenizer.from_pretrained(
-                    base_model_id,
-                    token=token,
-                    trust_remote_code=True
-                )
-                tokenizer.pad_token = tokenizer.eos_token
-                st.success("✅ Tokenizer loaded")
-
-                # Load base model
-                st.info("📚 Loading base model...")
-                base_model = AutoModelForCausalLM.from_pretrained(
-                    base_model_id,
-                    token=token,
-                    device_map="auto",
-                    torch_dtype=torch.float16,
-                    trust_remote_code=True,
-                    low_cpu_mem_usage=True
-                )
-
-                # Load PEFT configuration
-                st.info("📚 Loading PEFT configuration...")
-                peft_config = PeftConfig.from_pretrained(
-                    peft_model_id,
-                    token=token
-                )
-
-                # Load PEFT model
-                st.info("📚 Loading PEFT model...")
-                model = PeftModel.from_pretrained(
-                    base_model,
-                    peft_model_id,
-                    token=token,
-                    device_map="auto"
-                )
-
-                # Move to device and set to eval mode
-                device = "cuda" if torch.cuda.is_available() else "cpu"
-                model = model.to(device)
-                model.eval()
-                
-                st.session_state.model = model
-                st.session_state.tokenizer = tokenizer
-                st.success("✅ Model loaded successfully!")
-                st.info(f"💻 Using device: {device}")
-                
-            except Exception as e:
-                st.error(f"❌ Error: {str(e)}")
-                st.stop()
-
-def generate_response(prompt: str) -> str:
-    """Generate response with energy domain prompt engineering"""
-    system_prompt = """You are an expert energy infrastructure assistant. 
-    Provide detailed and accurate responses about energy systems, monitoring, and operations.
-    Focus on clear, actionable information and safety considerations."""
-    
-    full_prompt = f"{system_prompt}\n\nQuery: {prompt}\nResponse:"
-    
+def load_model():
+    """Load the model with detailed error reporting"""
     try:
-        inputs = st.session_state.tokenizer(
-            full_prompt,
-            return_tensors="pt",
-            padding=True
-        ).to(st.session_state.model.device)
-
-        outputs = st.session_state.model.generate(
-            **inputs,
-            max_length=512,
-            temperature=0.7,
-            top_p=0.9,
-            do_sample=True,
-            pad_token_id=st.session_state.tokenizer.pad_token_id,
-            eos_token_id=st.session_state.tokenizer.eos_token_id,
-            repetition_penalty=1.1
+        # 1. Login to Hugging Face
+        if "HUGGING_FACE_TOKEN" not in st.secrets:
+            st.error("Missing Hugging Face token!")
+            st.stop()
+            
+        token = st.secrets["HUGGING_FACE_TOKEN"]
+        login(token=token)
+        st.success("✅ Authenticated with Hugging Face")
+        
+        # 2. Load base model first
+        base_model_id = "google/gemma-2b"
+        st.info(f"Loading base model: {base_model_id}")
+        base_model = AutoModelForCausalLM.from_pretrained(
+            base_model_id,
+            token=token,
+            torch_dtype=torch.float16,
+            trust_remote_code=True
         )
-
-        response = st.session_state.tokenizer.decode(
-            outputs[0],
-            skip_special_tokens=True
-        ).replace(full_prompt, "").strip()
-
-        return response
-
+        st.success("✅ Base model loaded")
+        
+        # 3. Load tokenizer
+        st.info("Loading tokenizer...")
+        tokenizer = AutoTokenizer.from_pretrained(
+            base_model_id,
+            token=token,
+            trust_remote_code=True
+        )
+        st.success("✅ Tokenizer loaded")
+        
+        # 4. Load PEFT model
+        peft_model_id = "adetunjijeremiah/energy-gemma-2b"
+        st.info(f"Loading PEFT model: {peft_model_id}")
+        
+        model = PeftModel.from_pretrained(
+            base_model,
+            peft_model_id,
+            token=token
+        )
+        st.success("✅ PEFT model loaded")
+        
+        return model, tokenizer
+        
     except Exception as e:
-        st.error(f"❌ Error generating response: {str(e)}")
-        return "I apologize, but I encountered an error generating the response. Please try again."
+        st.error(f"Error loading model: {str(e)}")
+        st.exception(e)  # This will show the full error trace
+        return None, None
 
 def main():
     st.title("⚡ Energy Infrastructure Assistant")
@@ -115,45 +69,47 @@ def main():
     # Initialize chat history
     if "messages" not in st.session_state:
         st.session_state.messages = []
-
-    # Initialize model
-    initialize_model()
     
-    # Display chat messages
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    # Chat input
+    # Load model if not already loaded
+    if "model" not in st.session_state:
+        with st.spinner("Loading model... This may take a few minutes..."):
+            model, tokenizer = load_model()
+            if model is not None and tokenizer is not None:
+                st.session_state.model = model
+                st.session_state.tokenizer = tokenizer
+                st.success("✅ Model initialized successfully!")
+            else:
+                st.error("Failed to initialize model")
+                st.stop()
+    
+    # Simple chat interface for testing
     if prompt := st.chat_input("Ask about energy infrastructure..."):
-        # Add user message
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        # Generate and display response
-        with st.chat_message("assistant"):
-            with st.spinner("🤔 Thinking..."):
-                response = generate_response(prompt)
-                st.markdown(response)
-                st.session_state.messages.append(
-                    {"role": "assistant", "content": response}
-                )
-
-    # Sidebar
-    with st.sidebar:
-        st.markdown("""
-        ### About
-        This AI assistant specializes in:
-        - 🔍 Equipment monitoring
-        - 📚 Technical explanations
-        - 🛠️ Operational procedures
-        - 📋 Maintenance guidance
-        """)
+        st.chat_message("user").write(prompt)
         
-        if st.button("Clear Chat"):
-            st.session_state.messages = []
-            st.rerun()
+        with st.chat_message("assistant"):
+            try:
+                inputs = st.session_state.tokenizer(
+                    prompt,
+                    return_tensors="pt",
+                    padding=True
+                )
+                
+                outputs = st.session_state.model.generate(
+                    **inputs,
+                    max_length=512,
+                    temperature=0.7,
+                    num_return_sequences=1
+                )
+                
+                response = st.session_state.tokenizer.decode(
+                    outputs[0],
+                    skip_special_tokens=True
+                )
+                
+                st.write(response)
+                
+            except Exception as e:
+                st.error(f"Error generating response: {str(e)}")
 
 if __name__ == "__main__":
     main()
