@@ -4,7 +4,6 @@ st.set_page_config(page_title="Energy Assistant", page_icon="⚡")
 # First, test imports with error handling
 try:
     import torch
-    import transformers
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from peft import PeftModel, PeftConfig
     from huggingface_hub import login
@@ -28,12 +27,29 @@ def load_model():
         # 2. Load base model first
         base_model_id = "google/gemma-2b"
         st.info(f"Loading base model: {base_model_id}")
-        base_model = AutoModelForCausalLM.from_pretrained(
-            base_model_id,
-            token=token,
-            torch_dtype=torch.float16,
-            trust_remote_code=True
-        )
+        
+        # Configure model loading
+        model_config = {
+            "trust_remote_code": True,
+            "token": token,
+            "device_map": "auto",
+            "torch_dtype": torch.float16
+        }
+        
+        try:
+            base_model = AutoModelForCausalLM.from_pretrained(
+                base_model_id,
+                **model_config,
+                use_flash_attention_2=True
+            )
+        except Exception as model_error:
+            st.warning(f"Error with flash attention: {str(model_error)}")
+            # Try without flash attention
+            base_model = AutoModelForCausalLM.from_pretrained(
+                base_model_id,
+                **model_config
+            )
+        
         st.success("✅ Base model loaded")
         
         # 3. Load tokenizer
@@ -43,17 +59,27 @@ def load_model():
             token=token,
             trust_remote_code=True
         )
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
         st.success("✅ Tokenizer loaded")
         
         # 4. Load PEFT model
         peft_model_id = "adetunjijeremiah/energy-gemma-2b"
         st.info(f"Loading PEFT model: {peft_model_id}")
         
-        model = PeftModel.from_pretrained(
-            base_model,
+        # First try loading config
+        peft_config = PeftConfig.from_pretrained(
             peft_model_id,
             token=token
         )
+        
+        model = PeftModel.from_pretrained(
+            base_model,
+            peft_model_id,
+            token=token,
+            device_map="auto"
+        )
+        model.eval()
         st.success("✅ PEFT model loaded")
         
         return model, tokenizer
