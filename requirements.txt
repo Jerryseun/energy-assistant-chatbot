@@ -1,7 +1,6 @@
 streamlit==1.31.0
-torch==2.0.1
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.0.1+cpu
 transformers==4.37.2
-accelerate==0.25.0
 peft==0.7.1
-bitsandbytes==0.41.1
-scipy
+accelerate==0.25.0
