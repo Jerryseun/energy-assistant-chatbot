@@ -2,25 +2,26 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from typing import Tuple
 import time
-from config import ModelConfig, SystemPrompts
-from huggingface_hub import login
 import streamlit as st
+from config import ModelConfig, SystemPrompts
 
 class EnergyBot:
     def __init__(self, config: ModelConfig):
         self.config = config
+        self.system_prompts = SystemPrompts()
         self._load_model()
         
-    @st.cache_resource  # Cache the model loading to avoid reloading on every rerun
+    @st.cache_resource
     def _load_model(self):
         """Initialize model and tokenizer"""
         try:
+            print("Loading tokenizer...")
             self.tokenizer = AutoTokenizer.from_pretrained(
                 self.config.base_model,
                 trust_remote_code=True
             )
             
-            # Load the fine-tuned model
+            print("Loading model...")
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.config.model_path,
                 device_map="auto",
@@ -32,14 +33,29 @@ class EnergyBot:
         except Exception as e:
             raise RuntimeError(f"Failed to load model: {str(e)}")
 
+    def _detect_query_type(self, query: str) -> str:
+        """Detect query type to select appropriate system prompt"""
+        query = query.lower()
+        if any(word in query for word in ["status", "reading", "level", "current"]):
+            return "monitoring"
+        elif any(word in query for word in ["how", "explain", "what is", "describe"]):
+            return "technical"
+        elif any(word in query for word in ["procedure", "steps", "execute", "perform"]):
+            return "operational"
+        return "default"
+
     def generate_response(self, query: str) -> Tuple[str, float, int]:
         """Generate response with metrics"""
         start_time = time.time()
         try:
-            # Format the prompt
-            prompt = f"Query: {query}\nResponse:"
+            # Get appropriate system prompt
+            query_type = self._detect_query_type(query)
+            system_prompt = getattr(self.system_prompts, query_type)
             
-            # Tokenize and generate
+            # Format prompt
+            prompt = f"{system_prompt}\n\nQuery: {query}\nResponse:"
+            
+            # Generate response
             inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
             outputs = self.model.generate(
                 **inputs,
@@ -53,7 +69,7 @@ class EnergyBot:
                 eos_token_id=self.tokenizer.eos_token_id
             )
             
-            # Decode and clean response
+            # Process response
             response = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
             response = response.replace(prompt, "").strip()
             
