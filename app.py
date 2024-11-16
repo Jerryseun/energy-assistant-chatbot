@@ -35,7 +35,7 @@ def initialize_model():
                 # Load model with specific configuration
                 st.info("Loading model...")
                 model = AutoModelForCausalLM.from_pretrained(
-                    "adetunjijeremiah/energy-gemma-2b/tree/master",
+                    "adetunjijeremiah/energy-gemma-2b",
                     device_map="auto",
                     torch_dtype=torch.float16,
                     use_auth_token=True,
