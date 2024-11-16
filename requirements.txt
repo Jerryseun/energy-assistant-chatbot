@@ -1,0 +1,13 @@
+streamlit
+torch==2.1.0
+transformers==4.37.2
+plotly==5.18.0
+pandas==2.1.4
+numpy==1.24.3
+accelerate==0.25.0
+bitsandbytes==0.41.1
+peft==0.7.1
+huggingface-hub>=0.19.4
+protobuf>=3.20.0
+python-dotenv>=0.19.0
+tenacity>=8.0.0
