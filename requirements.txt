@@ -1,13 +1,11 @@
 streamlit==1.31.0
-transformers==4.37.2
-accelerate==0.25.0
-bitsandbytes==0.41.3
+torch>=2.0.0,<2.2.0
+transformers>=4.37.0
+accelerate>=0.25.0
+bitsandbytes>=0.41.3
 sentencepiece>=0.1.99
 protobuf>=3.20.0
 plotly==5.18.0
 pandas>=2.0.0
 numpy>=1.21.0
 huggingface-hub>=0.19.4
-peft==0.7.1
-trl==0.7.4
-accelerate
