@@ -1,8 +1,8 @@
-import streamlit as st
+import gradio as gr
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel, PeftConfig
 
-# Load the model and tokenizer
+# Load your fine-tuned model and tokenizer from Hugging Face
 config = PeftConfig.from_pretrained("adetunjijeremiah/energy-gemma-2b")
 base_model = AutoModelForCausalLM.from_pretrained("google/gemma-2b")
 model = PeftModel.from_pretrained(base_model, "adetunjijeremiah/energy-gemma-2b")
@@ -14,15 +14,14 @@ def ask_model(question):
     outputs = model.generate(inputs, max_length=200, num_return_sequences=1)
     return tokenizer.decode(outputs[0], skip_special_tokens=True)
 
-# Streamlit UI
-st.title("Energy Infrastructure Assistant")
-st.write("Ask any question about energy infrastructure, and I will answer!")
+# Gradio Interface
+iface = gr.Interface(
+    fn=ask_model,
+    inputs=gr.Textbox(label="Your Question"),
+    outputs=gr.Textbox(label="Assistant's Response"),
+    title="Energy Infrastructure Assistant",
+    description="Ask about energy infrastructure and get answers from the fine-tuned model."
+)
 
-# Text input from user
-user_question = st.text_input("Your Question:", "")
-
-# Generate and display the model's response
-if user_question:
-    response = ask_model(user_question)
-    st.write("Assistant's Response:")
-    st.write(response)
+# Launch the app
+iface.launch()
