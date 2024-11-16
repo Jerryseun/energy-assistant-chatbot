@@ -3,11 +3,12 @@ st.set_page_config(page_title="Energy Assistant", page_icon="⚡")
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from peft import PeftModel, PeftConfig
 from huggingface_hub import login
 import time
 
 def initialize_model():
-    """Initialize the model with robust error handling"""
+    """Initialize the PEFT model with proper loading sequence"""
     if "model" not in st.session_state:
         with st.spinner("🔄 Initializing..."):
             try:
@@ -18,8 +19,10 @@ def initialize_model():
 
                 # Load base model and tokenizer
                 base_model_id = "google/gemma-2b"
-                st.info(f"📚 Loading model from {base_model_id}...")
+                peft_model_id = "adetunjijeremiah/energy-gemma-2b"
 
+                # Load tokenizer
+                st.info("📚 Loading tokenizer...")
                 tokenizer = AutoTokenizer.from_pretrained(
                     base_model_id,
                     token=token,
@@ -28,7 +31,9 @@ def initialize_model():
                 tokenizer.pad_token = tokenizer.eos_token
                 st.success("✅ Tokenizer loaded")
 
-                model = AutoModelForCausalLM.from_pretrained(
+                # Load base model
+                st.info("📚 Loading base model...")
+                base_model = AutoModelForCausalLM.from_pretrained(
                     base_model_id,
                     token=token,
                     device_map="auto",
@@ -37,14 +42,26 @@ def initialize_model():
                     low_cpu_mem_usage=True
                 )
 
-                # Verify model loaded correctly
-                if model is None:
-                    raise ValueError("Model failed to load")
+                # Load PEFT configuration
+                st.info("📚 Loading PEFT configuration...")
+                peft_config = PeftConfig.from_pretrained(
+                    peft_model_id,
+                    token=token
+                )
 
-                # Move model to device
+                # Load PEFT model
+                st.info("📚 Loading PEFT model...")
+                model = PeftModel.from_pretrained(
+                    base_model,
+                    peft_model_id,
+                    token=token,
+                    device_map="auto"
+                )
+
+                # Move to device and set to eval mode
                 device = "cuda" if torch.cuda.is_available() else "cpu"
                 model = model.to(device)
-                model.eval()  # Set to evaluation mode
+                model.eval()
                 
                 st.session_state.model = model
                 st.session_state.tokenizer = tokenizer
