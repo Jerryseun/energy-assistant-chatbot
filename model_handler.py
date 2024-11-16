@@ -21,10 +21,23 @@ def load_model(_model_path: str, _base_model: str) -> Tuple[AutoModelForCausalLM
             st.error("HUGGING_FACE_TOKEN not found in secrets")
             st.stop()
 
-        # Load tokenizer
-        st.write(f"Loading tokenizer from {_base_model}...")
-        tokenizer = AutoTokenizer.from_pretrained(_base_model, trust_remote_code=True)
-        
+        # Load tokenizer first from the fine-tuned model
+        st.write(f"Loading tokenizer from fine-tuned model: {_model_path}")
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(
+                _model_path,
+                trust_remote_code=True,
+                token=token
+            )
+        except Exception as e:
+            st.write(f"Failed to load tokenizer from fine-tuned model, trying base model: {e}")
+            # Fallback to base model tokenizer
+            tokenizer = AutoTokenizer.from_pretrained(
+                "google/gemma-2b",  # Explicitly use full path
+                trust_remote_code=True,
+                token=token
+            )
+
         # Set pad token if not set
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
@@ -35,7 +48,8 @@ def load_model(_model_path: str, _base_model: str) -> Tuple[AutoModelForCausalLM
             _model_path,
             device_map="auto",
             torch_dtype=torch.float16,
-            trust_remote_code=True
+            trust_remote_code=True,
+            token=token
         )
         model.eval()
         st.write("Model loaded successfully!")
