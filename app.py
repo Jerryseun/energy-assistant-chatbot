@@ -32,14 +32,15 @@ def initialize_model():
                 
                 st.success("Tokenizer loaded!")
                 
-                # Load model
+                # Load model with specific configuration
                 st.info("Loading model...")
                 model = AutoModelForCausalLM.from_pretrained(
-                    "adetunjijeremiah/energy-gemma-2b",
+                    "https://huggingface.co/adetunjijeremiah/energy-gemma-2b/tree/master",
                     device_map="auto",
                     torch_dtype=torch.float16,
                     use_auth_token=True,
-                    trust_remote_code=True
+                    trust_remote_code=True,
+                    low_cpu_mem_usage=True
                 )
                 
                 st.session_state.model = model
@@ -48,6 +49,7 @@ def initialize_model():
                 
             except Exception as e:
                 st.error(f"Error initializing model: {str(e)}")
+                st.exception(e)  # This will show the full traceback
                 st.stop()
 
 def main():
@@ -100,6 +102,7 @@ def main():
                 
             except Exception as e:
                 st.error(f"Error generating response: {str(e)}")
+                st.exception(e)  # Show full traceback
 
 if __name__ == "__main__":
     main()
