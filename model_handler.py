@@ -5,33 +5,37 @@ import time
 import streamlit as st
 from config import ModelConfig, SystemPrompts
 
+@st.cache_resource
+def load_model(model_path: str, base_model: str):
+    """Load model and tokenizer with caching"""
+    try:
+        print("Loading tokenizer...")
+        tokenizer = AutoTokenizer.from_pretrained(
+            base_model,
+            trust_remote_code=True
+        )
+        
+        print("Loading model...")
+        model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            device_map="auto",
+            torch_dtype=torch.bfloat16,
+            trust_remote_code=True
+        )
+        model.eval()
+        print("Model loaded successfully!")
+        return model, tokenizer
+    except Exception as e:
+        raise RuntimeError(f"Failed to load model: {str(e)}")
+
 class EnergyBot:
     def __init__(self, config: ModelConfig):
         self.config = config
         self.system_prompts = SystemPrompts()
-        self._load_model()
-        
-    @st.cache_resource
-    def _load_model(self):
-        """Initialize model and tokenizer"""
-        try:
-            print("Loading tokenizer...")
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                self.config.base_model,
-                trust_remote_code=True
-            )
-            
-            print("Loading model...")
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.config.model_path,
-                device_map="auto",
-                torch_dtype=torch.bfloat16,
-                trust_remote_code=True
-            )
-            self.model.eval()
-            print("Model loaded successfully!")
-        except Exception as e:
-            raise RuntimeError(f"Failed to load model: {str(e)}")
+        self.model, self.tokenizer = load_model(
+            model_path=config.model_path,
+            base_model=config.base_model
+        )
 
     def _detect_query_type(self, query: str) -> str:
         """Detect query type to select appropriate system prompt"""

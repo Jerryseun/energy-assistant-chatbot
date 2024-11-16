@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 from model_handler import EnergyBot
 from metrics_handler import ChatMetrics
@@ -12,6 +11,17 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+def init_session_state():
+    """Initialize session state variables"""
+    if 'model' not in st.session_state:
+        with st.spinner('Loading model... This might take a minute...'):
+            config = ModelConfig()
+            st.session_state.model = EnergyBot(config)
+    if 'metrics' not in st.session_state:
+        st.session_state.metrics = ChatMetrics()
+    if 'messages' not in st.session_state:
+        st.session_state.messages = []
 
 # Load custom CSS
 with open('style.css') as f:
