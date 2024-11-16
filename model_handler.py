@@ -4,53 +4,38 @@ from typing import Tuple
 import time
 import streamlit as st
 from config import ModelConfig, SystemPrompts
-from huggingface_hub import login
 
 @st.cache_resource
 def load_model(model_path: str, base_model: str):
     """Load model and tokenizer with caching"""
     try:
-        # Login to Hugging Face
-        if "HUGGING_FACE_TOKEN" in st.secrets:
-            login(token=st.secrets["HUGGING_FACE_TOKEN"])
-            print("Successfully logged in to Hugging Face")
-        else:
-            raise ValueError("HUGGING_FACE_TOKEN not found in secrets")
-
-        print(f"Loading tokenizer from {base_model}...")
+        print("Loading tokenizer...")
         tokenizer = AutoTokenizer.from_pretrained(
-            base_model,
-            trust_remote_code=True,
-            use_auth_token=st.secrets["HUGGING_FACE_TOKEN"]
+            base_model = "energy-gemma-2b",
+            trust_remote_code=True
         )
         
-        print(f"Loading model from {model_path}...")
+        print("Loading model...")
         model = AutoModelForCausalLM.from_pretrained(
             model_path,
             device_map="auto",
             torch_dtype=torch.bfloat16,
-            trust_remote_code=True,
-            use_auth_token=st.secrets["HUGGING_FACE_TOKEN"]
+            trust_remote_code=True
         )
         model.eval()
         print("Model loaded successfully!")
         return model, tokenizer
     except Exception as e:
-        st.error(f"Error loading model: {str(e)}")
         raise RuntimeError(f"Failed to load model: {str(e)}")
 
 class EnergyBot:
     def __init__(self, config: ModelConfig):
         self.config = config
         self.system_prompts = SystemPrompts()
-        try:
-            self.model, self.tokenizer = load_model(
-                model_path=config.model_path,
-                base_model=config.base_model
-            )
-        except Exception as e:
-            st.error(f"Failed to initialize EnergyBot: {str(e)}")
-            raise
+        self.model, self.tokenizer = load_model(
+            model_path=config.model_path,
+            base_model=config.base_model
+        )
 
     def _detect_query_type(self, query: str) -> str:
         """Detect query type to select appropriate system prompt"""
