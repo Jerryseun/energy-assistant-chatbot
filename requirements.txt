@@ -1,7 +1,4 @@
-streamlit==1.31.0
+streamlit
+transformers
 torch
-transformers==4.37.2
-peft==0.7.1
-accelerate==0.25.0
-safetensors
-protobuf==3.20.0
+peft
